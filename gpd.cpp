@@ -1,5 +1,4 @@
 #include "gpd.h"
-
 using std::cerr;
 using std::string;
 using std::endl;
@@ -15,6 +14,7 @@ GnuplotDriver::GnuplotDriver() {
 	xlabel = "X [unità di X]";
 	title = "Titolo";
 	raise = false;
+	fitting=false;
 	persist = false;
 	matrice=false;
 	logX=false;
@@ -31,29 +31,32 @@ GnuplotDriver::GnuplotDriver() {
 	gp = NULL;
 }  
 GnuplotDriver::~GnuplotDriver() {
-	if(gp) {
+	int stream_legale=config_stream();
+	if(gp){
+		if(stream_legale){
+			std::stringstream string_final;
+			string_final << config_stream_string.str();
+			if(!matrice && !fitting){
+					if(nColonne==1 || nColonne==2){ //non sto facendo un plot 3d
+						string_final << "plot " << limits;
+					}else{ //sto facendo un plot 3d
+						string_final << "splot " << limits;
+					}
+					string_final << buf.str() << "0" << endl;
+					string_final << data.str();
+			}else{
+				string_final << buf.str() << data.str();
+			}
+			fprintf(gp, "%s",string_final.str().c_str());
+		}else{
+			cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
+		}
 		fclose(gp);
 	}
 }  
 
 int GnuplotDriver::conf(string opzione, string argomento){
 	string delimitatore="__";
-	if(opzione=="h"){
-		cerr << "Usage: [t (chart title, default \"" << title << "\"]" << endl;
-		cerr << "       [x (x axis title, default \"" << xlabel << "\")]" << endl;
-		cerr << "       [y (y axis title, default \"" << ylabel << "\")]" << endl;
-		cerr << "       [p (persist)]" <<endl;
-		cerr << "       [c (trace color, default \"" << trace_color << "\")]" << endl;
-		cerr << "		[ls (stile della linea, default )\"" << stileRiga << "\")]" << endl;
-		cerr << "       [m (plotta la heatmap della matrice di dati)]" << endl;
-		cerr << "       [logX (scala logaritmica sull'asse x, esclusa da -m)]" << endl;
-		cerr << "       [logY (scala logaritmica sull'asse y, esclusa da -m)]" << endl;
-		cerr << "       [fPath (Percorso in cui viene salvato il file, default gpd_fig. Non può coesistere con p)]" << endl;
-		cerr << "		[fExt (estensione della figura salvata, default .pdf. Non può coesistere con p)" << endl;
-		cerr << "       [lim (fissa gli assi, segue [xmin:xmax][ymin:ymax]<[zmin:zmax] se splot>)" << endl;
-		cerr << "       [func (prossimo argomento è una funzione con la sintassi di gnuplot che verrà plottata nel grafico insieme ai dati. Non funziona con -m)" << endl;
-		return 0;
-	}
 	if(opzione=="t"){
 		title=argomento;
 		return 0;
@@ -66,24 +69,8 @@ int GnuplotDriver::conf(string opzione, string argomento){
 		ylabel=argomento;
 		return 0;
 	}
-	if(opzione=="p"){
-		persist=true;
-		return 0;
-	}
 	if(opzione=="c"){
 		trace_color=argomento;
-		return 0;
-	}
-	if(opzione=="m"){
-		matrice=true;
-		return 0;
-	}
-	if(opzione=="logX"){
-		logX=true;
-		return 0;
-	}
-	if(opzione=="logY"){
-		logY=true;
 		return 0;
 	}
 	if(opzione=="fPath"){		
@@ -109,7 +96,43 @@ int GnuplotDriver::conf(string opzione, string argomento){
 		return 0;
 	}
 	return -1;
+}
 
+int GnuplotDriver::conf(string opzione){
+	string delimitatore="__";
+	if(opzione=="h"){
+		cerr << "Usage: [t (chart title, default \"" << title << "\"]" << endl;
+		cerr << "       [x (x axis title, default \"" << xlabel << "\")]" << endl;
+		cerr << "       [y (y axis title, default \"" << ylabel << "\")]" << endl;
+		cerr << "       [p (persist)]" <<endl;
+		cerr << "       [c (trace color, default \"" << trace_color << "\")]" << endl;
+		cerr << "		[ls (stile della linea, default )\"" << stileRiga << "\")]" << endl;
+		cerr << "       [m (plotta la heatmap della matrice di dati)]" << endl;
+		cerr << "       [logX (scala logaritmica sull'asse x, esclusa da -m)]" << endl;
+		cerr << "       [logY (scala logaritmica sull'asse y, esclusa da -m)]" << endl;
+		cerr << "       [fPath (Percorso in cui viene salvato il file, default gpd_fig. Non può coesistere con p)]" << endl;
+		cerr << "		[fExt (estensione della figura salvata, default .pdf. Non può coesistere con p)" << endl;
+		cerr << "       [lim (fissa gli assi, segue [xmin:xmax][ymin:ymax]<[zmin:zmax] se splot>)" << endl;
+		cerr << "       [func (prossimo argomento è una funzione con la sintassi di gnuplot che verrà plottata nel grafico insieme ai dati. Non funziona con -m)" << endl;
+		return 0;
+	}
+	if(opzione=="p"){
+		persist=true;
+		return 0;
+	}
+	if(opzione=="m"){
+		matrice=true;
+		return 0;
+	}
+	if(opzione=="logX"){
+		logX=true;
+		return 0;
+	}
+	if(opzione=="logY"){
+		logY=true;
+		return 0;
+	}
+	return -1;
 }
 
 bool GnuplotDriver::config_stream(){
@@ -145,32 +168,32 @@ bool GnuplotDriver::config_stream(){
 	}
 
 	//setto le prime cose che posso settare indipendente dal resto
-	stringstream buf;
-	buf << "set title '" << title << "'" << endl;
-	buf << "set xlabel '" << xlabel << "'" << endl;
-	buf << "set ylabel '" << ylabel << "'" << endl;
-	buf << "unset cblabel" << endl;
-	buf << "unset key" << endl;
-	buf << "set grid" << endl;      
+	// stringstream buf;
+	config_stream_string << "set title '" << title << "'" << endl;
+	config_stream_string << "set xlabel '" << xlabel << "'" << endl;
+	config_stream_string << "set ylabel '" << ylabel << "'" << endl;
+	config_stream_string << "unset cblabel" << endl;
+	config_stream_string << "unset key" << endl;
+	config_stream_string << "set grid" << endl;      
 	//setto i comandi di gnuplot in base ai comandi dati
 	//scale log
 	if(logX){
-		buf<<"set logscale x"<<endl;
+		config_stream_string<<"set logscale x"<<endl;
 	}
 	if(logY){
-		buf<<"set logscale y"<<endl;
+		config_stream_string<<"set logscale y"<<endl;
 	}
 	//formato di output
 	if(persist){
-		buf << "set terminal qt persist" << endl;
+		config_stream_string << "set terminal qt persist" << endl;
 	}
 	if(suFile){
 		if(format=="pdf"){
-			buf<<"set terminal pdfcairo"<<endl;
-			buf<<"set out \""<<nomefile<<".pdf\""<<endl;
+			config_stream_string<<"set terminal pdfcairo"<<endl;
+			config_stream_string<<"set out \""<<nomefile<<".pdf\""<<endl;
 		}else if(format=="jpg"){
-			buf<<"set terminal jpeg"<<endl;
-			buf<<"set out \""<<nomefile<<".jpg\""<<endl;
+			config_stream_string<<"set terminal jpeg"<<endl;
+			config_stream_string<<"set out \""<<nomefile<<".jpg\""<<endl;
 		}else{
 			cerr<<"il formato inserito per l'output non è supportato";
 			return false;
@@ -178,27 +201,24 @@ bool GnuplotDriver::config_stream(){
 	}
 	//dichiaro la funzione
 	if(funzioneOverlay){
-		buf << funzione << endl;
+		config_stream_string << funzione << endl;
 	}
-
-	fprintf(gp,"%s",buf.str().c_str());
 	return true;
 }
 
 //funzione principale con i valori normali
-//void GnuplotDriver::process(double *dati, int numRighe, int numColonne, string comandi) {
 int GnuplotDriver::plot(double * dati, int numRighe, int numColonne) {
+	nColonne=numColonne;
+	nRighe=numRighe;
 	bool datiLegali=true;
 	if(matrice==false && numColonne>3){
 		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
 		datiLegali=false;
 	}
-	if(config_stream() && datiLegali){
+	if(datiLegali){
 		
 		try {
-			stringstream buf;
 			//costruisco la stream di dati
-			stringstream data;
 			for(int i=0;i<numRighe;i++){
 				for(int j=0;j<numColonne;j++){
 					data<<dati[i*numColonne+j] << " ";
@@ -206,11 +226,6 @@ int GnuplotDriver::plot(double * dati, int numRighe, int numColonne) {
 				data<<endl;
 			}
 			if(matrice==false){ //vuol dire che sto plottando un grafico "normale"
-				if(numColonne==1 || numColonne==2){ //non sto facendo un plot 3d
-					buf << "plot " << limits;
-				}else{ //sto facendo un plot 3d
-					buf << "splot " << limits;
-				}
 				buf << " \"-\"";
 				//se do una colonna allora questa è la colonna delle y e le x sono gli indici, se do due colonne allora le colonne sono x e y mentre se do tre colonne queste sono x,y,z
 				switch(numColonne){
@@ -228,16 +243,13 @@ int GnuplotDriver::plot(double * dati, int numRighe, int numColonne) {
 					int end=funzione.find("=");
 					buf << ", " << funzione.substr(0, end);
 				}
-				buf << endl;
+				buf << ", ";
 				//finisco di mandare i dati alla streamstring
-				buf << data.str();
-				buf << "e" << endl;
+				data << "e" << endl;
 			}else{ //se non sto plottando un grafico "normale" allora sto plottando una heatmap
 				buf << "plot "<< limits <<" \"-\" matrix with image" << endl;
-				buf << data.str();
-				buf << "e" << endl;
+				data << "e" << endl;
 			}
-			fprintf(gp,"%s",buf.str().c_str());
 		}
 		catch (ios::failure const &problem) { //se succedono errori me lo segno
 			cerr << "gnuplot_driver: " << problem.what() << endl;
@@ -250,6 +262,7 @@ int GnuplotDriver::plot(double * dati, int numRighe, int numColonne) {
 }
 
 int GnuplotDriver::fit(double * dati, int numRighe, int numColonne, string funzione, string parametri){
+	fitting=true;
 	bool datiLegali=true;
 	if(numColonne>3){
 		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
@@ -267,14 +280,12 @@ int GnuplotDriver::fit(double * dati, int numRighe, int numColonne, string funzi
 	}
 	string fitFunc=funzione.substr(apertaTonda, funzione.length());
 	string varFunc=funzione.substr(apertaTonda, chiusaTonda);
-	if(config_stream() && datiLegali){
+	if(datiLegali){
 		try{
-			stringstream buf;
 			buf << "fitFunc" << fitFunc << endl;
 			buf << "set fit logfile \"" << nomefile << "_fitlog.txt\" " << endl;
 			buf << "set fit quiet" << endl;
 			//costruisco la stream di dati
-			stringstream data;
 			for(int i=0;i<numRighe;i++){
 				for(int j=0;j<numColonne;j++){
 					data<<dati[i*numColonne+j] << " ";
@@ -304,10 +315,8 @@ int GnuplotDriver::fit(double * dati, int numRighe, int numColonne, string funzi
 					buf << "u 1:2 ";
 				}
 				buf << "w " << stileRiga << " t \"dati\", fitFunc" << varFunc << " t \"fit\" "<<endl;
-				buf << data.str();
-				buf << "e" << endl;
+				data << "e" << endl;
 			}
-			fprintf(gp,"%s",buf.str().c_str());
 		}
 		catch (ios::failure const &problem) { //se succedono errori me lo segno
 			cerr << "gnuplot_driver: " << problem.what() << endl;
@@ -323,17 +332,16 @@ int GnuplotDriver::fit(double * dati, int numRighe, int numColonne, string funzi
 int GnuplotDriver::plot(arma::Mat<double> dati) {
 	int numRighe=dati.n_rows;
 	int numColonne=dati.n_cols;
+	nRighe=numRighe;
+	nColonne=numColonne;
 	bool datiLegali=true;
 	if(matrice==false && numColonne>3){
 		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
 		datiLegali=false;
 	}
-	if(config_stream() && datiLegali){
-		
+	if(datiLegali){		
 		try {
-			stringstream buf;
 			//costruisco la stream di dati
-			stringstream data;
 			for(int i=0;i<numRighe;i++){
 				for(int j=0;j<numColonne;j++){
 					data<<dati(i*numColonne+j, 0) << " ";
@@ -341,11 +349,6 @@ int GnuplotDriver::plot(arma::Mat<double> dati) {
 				data<<endl;
 			}
 			if(matrice==false){ //vuol dire che sto plottando un grafico "normale"
-				if(numColonne==1 || numColonne==2){ //non sto facendo un plot 3d
-					buf << "plot " << limits;
-				}else{ //sto facendo un plot 3d
-					buf << "splot " << limits;
-				}
 				buf << " \"-\"";
 				//se do una colonna allora questa è la colonna delle y e le x sono gli indici, se do due colonne allora le colonne sono x e y mentre se do tre colonne queste sono x,y,z
 				switch(numColonne){
@@ -365,14 +368,11 @@ int GnuplotDriver::plot(arma::Mat<double> dati) {
 				}
 				buf << endl;
 				//finisco di mandare i dati alla streamstring
-				buf << data.str();
-				buf << "e" << endl;
+				data << "e" << endl;
 			}else{ //se non sto plottando un grafico "normale" allora sto plottando una heatmap
 				buf << "plot "<< limits <<" \"-\" matrix with image" << endl;
-				buf << data.str();
-				buf << "e" << endl;
+				data << "e" << endl;
 			}
-			fprintf(gp,"%s",buf.str().c_str());
 		}
 		catch (ios::failure const &problem) { //se succedono errori me lo segno
 			cerr << "gnuplot_driver: " << problem.what() << endl;
@@ -385,6 +385,7 @@ int GnuplotDriver::plot(arma::Mat<double> dati) {
 }
 
 int GnuplotDriver::fit(arma::Mat<double> dati, int numRighe, int numColonne, string funzione, string parametri){
+	fitting=true;
 	bool datiLegali=true;
 	if(numColonne>3){
 		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
@@ -402,14 +403,12 @@ int GnuplotDriver::fit(arma::Mat<double> dati, int numRighe, int numColonne, str
 	}
 	string fitFunc=funzione.substr(apertaTonda, funzione.length());
 	string varFunc=funzione.substr(apertaTonda, chiusaTonda);
-	if(config_stream() && datiLegali){
+	if(datiLegali){
 		try{
-			stringstream buf;
 			buf << "fitFunc" << fitFunc << endl;
 			buf << "set fit logfile \"" << nomefile << "_fitlog.txt\" " << endl;
 			buf << "set fit quiet" << endl;
 			//costruisco la stream di dati
-			stringstream data;
 			for(int i=0;i<numRighe;i++){
 				for(int j=0;j<numColonne;j++){
 					data<<dati(i*numColonne+j, 0) << " ";
@@ -439,10 +438,8 @@ int GnuplotDriver::fit(arma::Mat<double> dati, int numRighe, int numColonne, str
 					buf << "u 1:2 ";
 				}
 				buf << "w " << stileRiga << " t \"dati\", fitFunc" << varFunc << " t \"fit\" "<<endl;
-				buf << data.str();
-				buf << "e" << endl;
+				data << "e" << endl;
 			}
-			fprintf(gp,"%s",buf.str().c_str());
 		}
 		catch (ios::failure const &problem) { //se succedono errori me lo segno
 			cerr << "gnuplot_driver: " << problem.what() << endl;
@@ -454,15 +451,3 @@ int GnuplotDriver::fit(arma::Mat<double> dati, int numRighe, int numColonne, str
 	}
 }
 #endif
-
-int GnuplotDriver::genComm(string comando){
-	if(config_stream()){
-		stringstream buf;
-		buf << comando;
-		fprintf(gp,"%s",buf.str().c_str());
-	}else{
-		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
-		return -1;
-	}
-	return 0;
-}
