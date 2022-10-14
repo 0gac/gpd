@@ -62,7 +62,6 @@ GnuplotDriver::~GnuplotDriver() {
 }  
 
 int GnuplotDriver::conf(string opzione, string argomento){
-	string delimitatore="__";
 	if(opzione=="t"){
 		title=argomento;
 		return 0;
