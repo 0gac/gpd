@@ -5,15 +5,12 @@
 #include <cmath>
 #include <cassert>
 #include <cstdlib>
-#ifdef GPDRIVER_ARMADILLO
-    #include <armadillo>
-#endif
 
 /*gnuplot driver per fare i grafici di gnuplot*/
 class GnuplotDriver{
     std::string xlabel,ylabel,title;
-    bool inverse,raise,persist,logX,logY,matrice, suFile, funzioneOverlay,fitting;
-    std::string trace_color,background_color, nomefile, format, limits, funzione, stileRiga;
+    bool inverse,raise,persist,logX,logY,matrice, suFile, funzioneOverlay,fitting, griglia, daEseguire, legenda;
+    std::string trace_color,background_color, nomefile, format, limits, funzione, stileRiga, titoloRiga, posLegenda;
     std::stringstream config_stream_string, buf, data;
     int nColonne, nRighe;
     FILE *gp;
@@ -23,10 +20,12 @@ class GnuplotDriver{
     int conf(std::string opzione, std::string argomento);
     int conf(std::string opzione);
     bool config_stream();
+    int comandoplot();
     int plot(double * dati, int numRighe, int numColonne);
+    int plot(double * dati1, double * dati2, int numRighe);
+    int plot(double * dati1, double * dati2, double * dati3, int numRighe);
+    int comandofit(std::string funzione, std::string parametri);
     int fit(double * dati, int numRighe, int numColonne, std::string funzione, std::string parametri);
-    #ifdef GPDRIVER_ARMADILLO
-        int plot(arma::Mat<double> dati);  
-        int fit(arma::Mat<double> dati, int numRighe, int numColonne, std::string funzione, std::string parametri);  
-    #endif
+    int fit(double * dati1, double * dati2, int numRighe, std::string funzione, std::string parametri);
+    int fit(double * dati1, double * dati2, double * dati3, int numRighe, std::string funzione, std::string parametri);
 };

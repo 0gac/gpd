@@ -21,6 +21,9 @@ GnuplotDriver::GnuplotDriver() {
 	logY=false;
 	suFile=false;
 	funzioneOverlay=false;
+	griglia=true;
+	daEseguire=false;
+	legenda=false;
 	trace_color = "blue";
 	format="pdf";
 	background_color = "white";
@@ -28,6 +31,8 @@ GnuplotDriver::GnuplotDriver() {
 	nomefile="gpd_fig";
 	format="pdf";
 	stileRiga="linespoints";
+	titoloRiga = "";
+	posLegenda = "top right";
 	gp = NULL;
 }  
 GnuplotDriver::~GnuplotDriver() {
@@ -42,12 +47,13 @@ GnuplotDriver::~GnuplotDriver() {
 					}else{ //sto facendo un plot 3d
 						string_final << "splot " << limits;
 					}
-					string_final << buf.str() << "0" << endl;
+					string_final << buf.str() << "0 notitle" << endl;
 					string_final << data.str();
 			}else{
 				string_final << buf.str() << data.str();
 			}
 			fprintf(gp, "%s",string_final.str().c_str());
+			// printf("%s",string_final.str().c_str());
 		}else{
 			cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
 		}
@@ -95,11 +101,17 @@ int GnuplotDriver::conf(string opzione, string argomento){
 		stileRiga=argomento;
 		return 0;
 	}
+	if(opzione=="lt"){
+		legenda=true;
+		titoloRiga=argomento;
+	}	
+	if(opzione=="keyLoc"){
+		posLegenda=argomento;
+	}
 	return -1;
 }
 
 int GnuplotDriver::conf(string opzione){
-	string delimitatore="__";
 	if(opzione=="h"){
 		cerr << "Usage: [t (chart title, default \"" << title << "\"]" << endl;
 		cerr << "       [x (x axis title, default \"" << xlabel << "\")]" << endl;
@@ -113,7 +125,10 @@ int GnuplotDriver::conf(string opzione){
 		cerr << "       [fPath (Percorso in cui viene salvato il file, default gpd_fig. Non può coesistere con p)]" << endl;
 		cerr << "		[fExt (estensione della figura salvata, default .pdf. Non può coesistere con p)" << endl;
 		cerr << "       [lim (fissa gli assi, segue [xmin:xmax][ymin:ymax]<[zmin:zmax] se splot>)" << endl;
-		cerr << "       [func (prossimo argomento è una funzione con la sintassi di gnuplot che verrà plottata nel grafico insieme ai dati. Non funziona con -m)" << endl;
+		cerr << "       [func (prossimo argomento è una funzione con la sintassi di gnuplot che verrà plottata nel grafico insieme ai dati. Non funziona con -m)" << endl;		
+		cerr << "       [noGrid (rimuove la griglia dal grafico)]" << endl;		
+		cerr << "		[lt (line title, specifica il titolo della linea successiva nella legenda.)]" << endl;
+		cerr <<"		[keyLoc (key location: top right, top left, bottom right, bottom left.)]";
 		return 0;
 	}
 	if(opzione=="p"){
@@ -132,10 +147,17 @@ int GnuplotDriver::conf(string opzione){
 		logY=true;
 		return 0;
 	}
+	if(opzione=="noGrid"){
+		griglia=false;
+		return 0;
+	}
 	return -1;
 }
 
 bool GnuplotDriver::config_stream(){
+	if(!daEseguire && !fitting){
+		return false;
+	}
 	//apro la stream verso Gnuplot e sistemo tutte le configurazioni globali
 	if(!gp) {
 		//costruisco la stringa per chiamare gnuplot con le richieste proprietà
@@ -174,8 +196,15 @@ bool GnuplotDriver::config_stream(){
 	config_stream_string << "set ylabel '" << ylabel << "'" << endl;
 	config_stream_string << "unset cblabel" << endl;
 	config_stream_string << "unset key" << endl;
-	config_stream_string << "set grid" << endl;      
 	//setto i comandi di gnuplot in base ai comandi dati
+	//legenda
+	if(legenda){
+		config_stream_string << "set key " << posLegenda << endl;
+	}
+	// griglia
+	if(griglia){
+		config_stream_string << "set grid" << endl; 
+	}     
 	//scale log
 	if(logX){
 		config_stream_string<<"set logscale x"<<endl;
@@ -206,54 +235,100 @@ bool GnuplotDriver::config_stream(){
 	return true;
 }
 
+// funzione che crea il comando per plottare i dati
+int GnuplotDriver::comandoplot(){
+	daEseguire=true;
+	try{
+		if(matrice==false){ //vuol dire che sto plottando un grafico "normale"
+			buf << " \"-\"";
+			//se do una colonna allora questa è la colonna delle y e le x sono gli indici, se do due colonne allora le colonne sono x e y mentre se do tre colonne queste sono x,y,z
+			switch(nColonne){
+				case 1:
+					buf << " u 0:1 w ";
+				break;
+				case 2:
+					buf << " u 1:2 w ";
+				break;
+				case 3:
+					buf << " u 1:2:3 w ";
+				break;
+			}
+			buf << stileRiga;
+			if(!legenda || titoloRiga == ""){
+				buf << " notitle";
+			}else{
+				buf << " t \"" << titoloRiga << "\"";
+				titoloRiga = ""; // se non diversamente specificato il titolo della riga successiva deve essere vuoto
+			}
+			buf << " lc rgb \"" << trace_color << "\"";
+			if(funzioneOverlay){
+				int end=funzione.find("=");
+				buf << ", " << funzione.substr(0, end);
+			}
+			buf << ", ";
+			//finisco di mandare i dati alla streamstring
+			data << "e" << endl;
+		}else{ //se non sto plottando un grafico "normale" allora sto plottando una heatmap
+			buf << "plot "<< limits <<" \"-\" matrix with image" << endl;
+			data << "e" << endl;
+		}
+	}
+	catch (ios::failure const &problem) { //se succedono errori me lo segno
+		cerr << "gnuplot_driver: " << problem.what() << endl;
+	}
+	return 0;
+}
+
 //funzione principale con i valori normali
-int GnuplotDriver::plot(double * dati, int numRighe, int numColonne) {
+int GnuplotDriver::plot(double * dati, int numRighe, int numColonne){
+	bool datiLegali=true;	
 	nColonne=numColonne;
-	nRighe=numRighe;
-	bool datiLegali=true;
-	if(matrice==false && numColonne>3){
+	nRighe=numRighe;	
+	if(matrice==false && nColonne>3){
 		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
 		datiLegali=false;
 	}
-	if(datiLegali){
-		
-		try {
-			//costruisco la stream di dati
-			for(int i=0;i<numRighe;i++){
-				for(int j=0;j<numColonne;j++){
-					data<<dati[i*numColonne+j] << " ";
-				}
-				data<<endl;
+	if(datiLegali){	
+		//costruisco la stream di dati
+		for(int i=0;i<nRighe;i++){
+			for(int j=0;j<nColonne;j++){
+				data<<dati[i*nColonne+j] << " ";
 			}
-			if(matrice==false){ //vuol dire che sto plottando un grafico "normale"
-				buf << " \"-\"";
-				//se do una colonna allora questa è la colonna delle y e le x sono gli indici, se do due colonne allora le colonne sono x e y mentre se do tre colonne queste sono x,y,z
-				switch(numColonne){
-					case 1:
-						buf << " u 0:1 w "<< stileRiga << " notitle lc rgb \"" << trace_color << "\"";
-					break;
-					case 2:
-						buf << " u 1:2 w "<< stileRiga << " notitle lc rgb \"" << trace_color << "\"";
-					break;
-					case 3:
-						buf << " u 1:2:3 w "<< stileRiga << " notitle lc rgb \"" << trace_color << "\"";
-					break;
-				}
-				if(funzioneOverlay){
-					int end=funzione.find("=");
-					buf << ", " << funzione.substr(0, end);
-				}
-				buf << ", ";
-				//finisco di mandare i dati alla streamstring
-				data << "e" << endl;
-			}else{ //se non sto plottando un grafico "normale" allora sto plottando una heatmap
-				buf << "plot "<< limits <<" \"-\" matrix with image" << endl;
-				data << "e" << endl;
-			}
-		}
-		catch (ios::failure const &problem) { //se succedono errori me lo segno
-			cerr << "gnuplot_driver: " << problem.what() << endl;
-		}
+			data<<endl;
+		}	
+		comandoplot();	
+		return 0;
+	}else{
+		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
+		return -1;
+	}
+}
+int GnuplotDriver::plot(double * dati1, double * dati2, int numRighe){
+	bool datiLegali=true;
+	nRighe=numRighe;
+	nColonne=2;
+	if(datiLegali){	
+		//costruisco la stream di dati
+		for(int i=0;i<nRighe;i++){
+			data<< dati1[i] << " " << dati2[i] << endl;
+		}	
+		comandoplot();	
+		return 0;
+	}else{
+		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
+		return -1;
+	}
+}
+int GnuplotDriver::plot(double * dati1, double * dati2, double * dati3, int numRighe){
+	bool datiLegali=true;
+	nRighe=numRighe;
+	nColonne=3;	
+	if(datiLegali){	
+		//costruisco la stream di dati
+		for(int i=0;i<nRighe;i++){
+			data<< dati1[i] << " " << dati2[i] << " " << dati3[i] << endl;
+		}	
+		comandoplot();	
 		return 0;
 	}else{
 		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
@@ -261,193 +336,109 @@ int GnuplotDriver::plot(double * dati, int numRighe, int numColonne) {
 	}
 }
 
+int GnuplotDriver::comandofit(string funzione, string parametri){
+	int nVariabili=0;
+	int posUguale=funzione.find("=");
+	string nomeFunc=funzione.substr(0, posUguale);
+	int apertaTonda=nomeFunc.find("(");
+	int chiusaTonda=nomeFunc.find(")");
+	if(chiusaTonda-apertaTonda==2){
+		nVariabili=1;
+	}else if(chiusaTonda-apertaTonda==4){
+		nVariabili=2;
+	}
+	string fitFunc=funzione.substr(apertaTonda, funzione.length());
+	string varFunc=funzione.substr(apertaTonda, chiusaTonda);
+	try{
+		buf << "fitFunc" << fitFunc << endl;
+		buf << "set fit logfile \"" << nomefile << "_fitlog.txt\" " << endl;
+		buf << "set fit quiet" << endl;
+		buf << "fit " << limits << " fitFunc" << varFunc << " \"-\" ";
+		if(nVariabili=1 && nColonne==1){
+			buf << "u 0:1 "; 
+		}else if(nVariabili=1 && nColonne==2){
+			buf << "u 1:2 ";
+		}else if(nVariabili=2 && nColonne==2){
+			buf << "u 0:1:2 ";
+		}else if(nVariabili=2 && nColonne==3){
+			buf << "u 1:2:3 ";
+		}
+		buf << "via " << parametri << endl;
+		buf << data.str();
+		buf << "e" << endl;
+
+		if(nVariabili==1){
+			buf << "set key " << posLegenda << endl;
+			buf << "plot " << limits << " \"-\" ";
+			if(nColonne==1){
+				buf << "u 0:1 ";
+			}else if(nColonne==2){
+				buf << "u 1:2 ";
+			}
+			buf << "w " << stileRiga << " t \"dati\", fitFunc" << varFunc << " t \"fit\" "<<endl;
+			data << "e" << endl;
+		}
+	}
+	catch (ios::failure const &problem) { //se succedono errori me lo segno
+		cerr << "gnuplot_driver: " << problem.what() << endl;
+	}
+	return 0;
+}
 int GnuplotDriver::fit(double * dati, int numRighe, int numColonne, string funzione, string parametri){
 	fitting=true;
 	bool datiLegali=true;
-	if(numColonne>3){
-		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
-		datiLegali=false;
-	}
-	int nVariabili=0;
-	int posUguale=funzione.find("=");
-	string nomeFunc=funzione.substr(0, posUguale);
-	int apertaTonda=nomeFunc.find("(");
-	int chiusaTonda=nomeFunc.find(")");
-	if(chiusaTonda-apertaTonda==2){
-		nVariabili=1;
-	}else if(chiusaTonda-apertaTonda==4){
-		nVariabili=2;
-	}
-	string fitFunc=funzione.substr(apertaTonda, funzione.length());
-	string varFunc=funzione.substr(apertaTonda, chiusaTonda);
-	if(datiLegali){
-		try{
-			buf << "fitFunc" << fitFunc << endl;
-			buf << "set fit logfile \"" << nomefile << "_fitlog.txt\" " << endl;
-			buf << "set fit quiet" << endl;
-			//costruisco la stream di dati
-			for(int i=0;i<numRighe;i++){
-				for(int j=0;j<numColonne;j++){
-					data<<dati[i*numColonne+j] << " ";
-				}
-				data<<endl;
-			}
-			buf << "fit " << limits << " fitFunc" << varFunc << " \"-\" ";
-			if(nVariabili=1 && numColonne==1){
-				buf << "u 0:1 "; 
-			}else if(nVariabili=1 && numColonne==2){
-				buf << "u 1:2 ";
-			}else if(nVariabili=2 && numColonne==2){
-				buf << "u 0:1:2 ";
-			}else if(nVariabili=2 && numColonne==3){
-				buf << "u 1:2:3 ";
-			}
-			buf << "via " << parametri << endl;
-			buf << data.str();
-			buf << "e" << endl;
-
-			if(nVariabili==1){
-				buf << "set key" << endl;
-				buf << "plot " << limits << " \"-\" ";
-				if(numColonne==1){
-					buf << "u 0:1 ";
-				}else if(numColonne==2){
-					buf << "u 1:2 ";
-				}
-				buf << "w " << stileRiga << " t \"dati\", fitFunc" << varFunc << " t \"fit\" "<<endl;
-				data << "e" << endl;
-			}
-		}
-		catch (ios::failure const &problem) { //se succedono errori me lo segno
-			cerr << "gnuplot_driver: " << problem.what() << endl;
-		}
-		return 0;
-	}else{
-		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
-		return -1;
-	}
-}
-
-#ifdef GPDRIVER_ARMADILLO
-int GnuplotDriver::plot(arma::Mat<double> dati) {
-	int numRighe=dati.n_rows;
-	int numColonne=dati.n_cols;
 	nRighe=numRighe;
 	nColonne=numColonne;
-	bool datiLegali=true;
-	if(matrice==false && numColonne>3){
+	if(nColonne>3){
 		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
 		datiLegali=false;
 	}
-	if(datiLegali){		
-		try {
-			//costruisco la stream di dati
-			for(int i=0;i<numRighe;i++){
-				for(int j=0;j<numColonne;j++){
-					data<<dati(i*numColonne+j, 0) << " ";
-				}
-				data<<endl;
+	if(datiLegali){	
+		//costruisco la stream di dati
+		for(int i=0;i<nRighe;i++){
+			for(int j=0;j<nColonne;j++){
+				data<<dati[i*nColonne+j] << " ";
 			}
-			if(matrice==false){ //vuol dire che sto plottando un grafico "normale"
-				buf << " \"-\"";
-				//se do una colonna allora questa è la colonna delle y e le x sono gli indici, se do due colonne allora le colonne sono x e y mentre se do tre colonne queste sono x,y,z
-				switch(numColonne){
-					case 1:
-						buf << " u 0:1 w "<< stileRiga << " notitle lc rgb \"" << trace_color << "\"";
-					break;
-					case 2:
-						buf << " u 1:2 w "<< stileRiga << " notitle lc rgb \"" << trace_color << "\"";
-					break;
-					case 3:
-						buf << " u 1:2:3 w "<< stileRiga << " notitle lc rgb \"" << trace_color << "\"";
-					break;
-				}
-				if(funzioneOverlay){
-					int end=funzione.find("=");
-					buf << ", " << funzione.substr(0, end);
-				}
-				buf << endl;
-				//finisco di mandare i dati alla streamstring
-				data << "e" << endl;
-			}else{ //se non sto plottando un grafico "normale" allora sto plottando una heatmap
-				buf << "plot "<< limits <<" \"-\" matrix with image" << endl;
-				data << "e" << endl;
-			}
-		}
-		catch (ios::failure const &problem) { //se succedono errori me lo segno
-			cerr << "gnuplot_driver: " << problem.what() << endl;
-		}
+			data<<endl;
+		}	
+		comandofit(funzione, parametri);
 		return 0;
 	}else{
 		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
 		return -1;
 	}
 }
-
-int GnuplotDriver::fit(arma::Mat<double> dati, int numRighe, int numColonne, string funzione, string parametri){
+int GnuplotDriver::fit(double * dati1, double * dati2, int numRighe, string funzione, string parametri){
 	fitting=true;
 	bool datiLegali=true;
-	if(numColonne>3){
-		cerr<<"non si possono fare grafici con dimensione maggiore di 3"<<endl;
-		datiLegali=false;
-	}
-	int nVariabili=0;
-	int posUguale=funzione.find("=");
-	string nomeFunc=funzione.substr(0, posUguale);
-	int apertaTonda=nomeFunc.find("(");
-	int chiusaTonda=nomeFunc.find(")");
-	if(chiusaTonda-apertaTonda==2){
-		nVariabili=1;
-	}else if(chiusaTonda-apertaTonda==4){
-		nVariabili=2;
-	}
-	string fitFunc=funzione.substr(apertaTonda, funzione.length());
-	string varFunc=funzione.substr(apertaTonda, chiusaTonda);
-	if(datiLegali){
-		try{
-			buf << "fitFunc" << fitFunc << endl;
-			buf << "set fit logfile \"" << nomefile << "_fitlog.txt\" " << endl;
-			buf << "set fit quiet" << endl;
-			//costruisco la stream di dati
-			for(int i=0;i<numRighe;i++){
-				for(int j=0;j<numColonne;j++){
-					data<<dati(i*numColonne+j, 0) << " ";
-				}
-				data<<endl;
-			}
-			buf << "fit " << limits << " fitFunc" << varFunc << " \"-\" ";
-			if(nVariabili=1 && numColonne==1){
-				buf << "u 0:1 "; 
-			}else if(nVariabili=1 && numColonne==2){
-				buf << "u 1:2 ";
-			}else if(nVariabili=2 && numColonne==2){
-				buf << "u 0:1:2 ";
-			}else if(nVariabili=2 && numColonne==3){
-				buf << "u 1:2:3 ";
-			}
-			buf << "via " << parametri << endl;
-			buf << data.str();
-			buf << "e" << endl;
-
-			if(nVariabili==1){
-				buf << "set key" << endl;
-				buf << "plot " << limits << " \"-\" ";
-				if(numColonne==1){
-					buf << "u 0:1 ";
-				}else if(numColonne==2){
-					buf << "u 1:2 ";
-				}
-				buf << "w " << stileRiga << " t \"dati\", fitFunc" << varFunc << " t \"fit\" "<<endl;
-				data << "e" << endl;
-			}
-		}
-		catch (ios::failure const &problem) { //se succedono errori me lo segno
-			cerr << "gnuplot_driver: " << problem.what() << endl;
-		}
+	nRighe=numRighe;
+	nColonne=2;
+	if(datiLegali){	
+		//costruisco la stream di dati
+		for(int i=0;i<nRighe;i++){
+			data<< dati1[i] << " " << dati2[i] << endl;
+		}		
+		comandofit(funzione, parametri);
 		return 0;
 	}else{
 		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
 		return -1;
 	}
 }
-#endif
+int GnuplotDriver::fit(double * dati1, double * dati2, double * dati3, int numRighe, string funzione, string parametri){
+	fitting=true;
+	bool datiLegali=true;
+	nRighe=numRighe;
+	nColonne=3;
+	if(datiLegali){	
+		//costruisco la stream di dati
+		for(int i=0;i<nRighe;i++){
+			data<< dati1[i] << " " << dati2[i] << " " << dati3[i] << endl;
+		}	
+		comandofit(funzione, parametri);
+		return 0;
+	}else{
+		cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
+		return -1;
+	}
+}
