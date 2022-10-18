@@ -47,7 +47,7 @@ GnuplotDriver::~GnuplotDriver() {
 					}else{ //sto facendo un plot 3d
 						string_final << "splot " << limits;
 					}
-					string_final << buf.str() << "0 notitle" << endl;
+					string_final << buf.str() << endl;
 					string_final << data.str();
 			}else{
 				string_final << buf.str() << data.str();
