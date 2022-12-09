@@ -8,11 +8,11 @@
 
 /*gnuplot driver per fare i grafici di gnuplot*/
 class GnuplotDriver{
-    std::string xlabel,ylabel,title;
-    bool inverse,raise,persist,logX,logY,matrice, suFile, funzioneOverlay,fitting, griglia, daEseguire, legenda;
-    std::string trace_color,background_color, nomefile, format, limits, funzione, stileRiga, titoloRiga, posLegenda;
+    std::string xlabel,ylabel,zlabel, title, trace_color,background_color, nomefile, format, limitx, limity, limitz, limitx_fit, limity_fit, funzione, stileRiga, titoloRiga, posLegenda;
+    std::string * codici_colore;
+    bool inverse,raise,persist,logX,logY,matrice, suFile, funzioneOverlay,fitting, griglia, daEseguire, legenda, auto_color;
     std::stringstream config_stream_string, buf, data;
-    int nColonne, nRighe;
+    int nColonne, nRighe, num_linea, max_linee;
     FILE *gp;
     public:
     GnuplotDriver();

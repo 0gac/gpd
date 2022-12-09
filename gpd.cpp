@@ -12,6 +12,7 @@ using std::ios;
 GnuplotDriver::GnuplotDriver() {
 	ylabel = "Y [unità di Y]";
 	xlabel = "X [unità di X]";
+	zlabel = "Z [unità di Z]";
 	title = "Titolo";
 	raise = false;
 	fitting=false;
@@ -24,16 +25,28 @@ GnuplotDriver::GnuplotDriver() {
 	griglia=true;
 	daEseguire=false;
 	legenda=false;
+	auto_color=true;
 	trace_color = "blue";
 	format="pdf";
 	background_color = "white";
-	limits="";
+	limitx="";
+	limity="";
+	limitz="";
+	limitx_fit="";
+	limity_fit="";
 	nomefile="gpd_fig";
 	format="pdf";
 	stileRiga="linespoints";
 	titoloRiga = "";
 	posLegenda = "top right";
 	gp = NULL;
+	num_linea=0;
+	max_linee=64;
+	codici_colore = new std::string[4];
+	codici_colore[0]="3F";
+	codici_colore[1]="7F";
+	codici_colore[2]="BF";
+	codici_colore[3]="FF";
 }  
 GnuplotDriver::~GnuplotDriver() {
 	int stream_legale=config_stream();
@@ -43,9 +56,9 @@ GnuplotDriver::~GnuplotDriver() {
 			string_final << config_stream_string.str();
 			if(!matrice && !fitting){
 					if(nColonne==1 || nColonne==2){ //non sto facendo un plot 3d
-						string_final << "plot " << limits;
+						string_final << "plot ";
 					}else{ //sto facendo un plot 3d
-						string_final << "splot " << limits;
+						string_final << "splot ";
 					}
 					string_final << buf.str() << endl;
 					string_final << data.str();
@@ -73,9 +86,14 @@ int GnuplotDriver::conf(string opzione, string argomento){
 	if(opzione=="y"){
 		ylabel=argomento;
 		return 0;
+	}	
+	if(opzione=="z"){
+		zlabel=argomento;
+		return 0;
 	}
 	if(opzione=="c"){
 		trace_color=argomento;
+		auto_color=false;
 		return 0;
 	}
 	if(opzione=="fPath"){		
@@ -87,8 +105,24 @@ int GnuplotDriver::conf(string opzione, string argomento){
 		suFile=true;
 		format=argomento;
 	}
-	if(opzione=="lim"){
-		limits=argomento;
+	if(opzione=="limX"){
+		limitx=argomento;
+		return 0;
+	}
+	if(opzione=="limY"){
+		limity=argomento;
+		return 0;
+	}	
+	if(opzione=="limXFit"){
+		limitx_fit=argomento;
+		return 0;
+	}
+	if(opzione=="limYFit"){
+		limity_fit=argomento;
+		return 0;
+	}
+	if(opzione=="limZ"){
+		limitz=argomento;
 		return 0;
 	}
 	if(opzione=="func"){
@@ -115,6 +149,7 @@ int GnuplotDriver::conf(string opzione){
 		cerr << "Usage: [t (chart title, default \"" << title << "\"]" << endl;
 		cerr << "       [x (x axis title, default \"" << xlabel << "\")]" << endl;
 		cerr << "       [y (y axis title, default \"" << ylabel << "\")]" << endl;
+		cerr << "       [z (z axis title, default \"" << zlabel << "\")]" << endl;
 		cerr << "       [p (persist)]" <<endl;
 		cerr << "       [c (trace color, default \"" << trace_color << "\")]" << endl;
 		cerr << "		[ls (stile della linea, default )\"" << stileRiga << "\")]" << endl;
@@ -123,7 +158,11 @@ int GnuplotDriver::conf(string opzione){
 		cerr << "       [logY (scala logaritmica sull'asse y, esclusa da -m)]" << endl;
 		cerr << "       [fPath (Percorso in cui viene salvato il file, default gpd_fig. Non può coesistere con p)]" << endl;
 		cerr << "		[fExt (estensione della figura salvata, default .pdf. Non può coesistere con p)" << endl;
-		cerr << "       [lim (fissa gli assi, segue [xmin:xmax][ymin:ymax]<[zmin:zmax] se splot>)" << endl;
+		cerr << "       [limX ( segue [xmin:xmax])" << endl;
+		cerr << "       [limY ( segue [ymin:ymax])" << endl;
+		cerr << "       [limZ ( segue [zmin:zmax] <valido solo se splot>)" << endl;
+		cerr << "       [limXFit ( segue [xmin:xmax] per i dati da fittare <valido solo se fitting>)" << endl;
+		cerr << "       [limYFit ( segue [ymin:ymax] per i dati da fittare <valido solo se fitting>)" << endl;
 		cerr << "       [func (prossimo argomento è una funzione con la sintassi di gnuplot che verrà plottata nel grafico insieme ai dati. Non funziona con -m)" << endl;		
 		cerr << "       [noGrid (rimuove la griglia dal grafico)]" << endl;		
 		cerr << "		[lt (line title, specifica il titolo della linea successiva nella legenda.)]" << endl;
@@ -187,12 +226,21 @@ bool GnuplotDriver::config_stream(){
 		cerr <<" stile della riga specificato non esiste" << endl;
 		return false;
 	}
+	// controllo di non aver settato i limiti dell'asse z in grafici 2d
+	if(nColonne<3 && (limitz != "" || matrice)){
+		cerr << "non sono consentiti limiti sull'asse z per grafici 2d" << endl;
+		return false;
+	}
+	if(fitting == false && (limitx_fit!="" || limity_fit!="")){
+		cerr << "non sono consentiti limiti sui fit se non vengono fatti fit" << endl;
+	}
 
 	//setto le prime cose che posso settare indipendente dal resto
 	// stringstream buf;
 	config_stream_string << "set title '" << title << "'" << endl;
 	config_stream_string << "set xlabel '" << xlabel << "'" << endl;
 	config_stream_string << "set ylabel '" << ylabel << "'" << endl;
+	config_stream_string << "set zlabel '" << zlabel << "'" << endl;
 	config_stream_string << "unset cblabel" << endl;
 	config_stream_string << "unset key" << endl;
 	//setto i comandi di gnuplot in base ai comandi dati
@@ -210,6 +258,25 @@ bool GnuplotDriver::config_stream(){
 	}
 	if(logY){
 		config_stream_string<<"set logscale y"<<endl;
+	}
+	// limiti
+	if(fitting){
+		if(limitx_fit!=""){
+			config_stream_string << "set xrange " << limitx_fit << endl;
+		}
+		if(limity_fit!=""){
+			config_stream_string << "set yrange " << limity_fit << endl;
+		}
+	}else{
+		if(limitx!=""){
+			config_stream_string << "set xrange " << limitx << endl;
+		}
+		if(limity!=""){
+			config_stream_string << "set yrange " << limity << endl;
+		}
+		if(limitz!=""){
+			config_stream_string << "set zrange " << limitz << endl;
+		}
 	}
 	//formato di output
 	if(persist){
@@ -259,7 +326,17 @@ int GnuplotDriver::comandoplot(){
 				buf << " t \"" << titoloRiga << "\"";
 				titoloRiga = ""; // se non diversamente specificato il titolo della riga successiva deve essere vuoto
 			}
-			buf << " lc rgb \"" << trace_color << "\"";
+			if(auto_color){
+				int b=num_linea%4;
+				int g=(num_linea/4)%4;
+				int r=(num_linea/16)%4;
+				std::string coloretemp= "#"+codici_colore[r]+codici_colore[g]+codici_colore[b];
+				buf << " lc rgb \"" << coloretemp << "\"";
+				num_linea < 63 ? num_linea++ : num_linea = 0;	
+			}else{
+				buf << " lc rgb \"" << trace_color << "\"";
+				auto_color=true;
+			}
 			if(funzioneOverlay){
 				int end=funzione.find("=");
 				buf << ", " << funzione.substr(0, end);
@@ -268,7 +345,7 @@ int GnuplotDriver::comandoplot(){
 			//finisco di mandare i dati alla streamstring
 			data << "e" << endl;
 		}else{ //se non sto plottando un grafico "normale" allora sto plottando una heatmap
-			buf << "plot "<< limits <<" \"-\" matrix with image" << endl;
+			buf << "plot " <<" \"-\" matrix with image" << endl;
 			data << "e" << endl;
 		}
 	}
@@ -352,7 +429,7 @@ int GnuplotDriver::comandofit(string funzione, string parametri){
 		buf << "fitFunc" << fitFunc << endl;
 		buf << "set fit logfile \"" << nomefile << "_fitlog.txt\" " << endl;
 		buf << "set fit quiet" << endl;
-		buf << "fit " << limits << " fitFunc" << varFunc << " \"-\" ";
+		buf << "fit " << " fitFunc" << varFunc << " \"-\" ";
 		if(nVariabili=1 && nColonne==1){
 			buf << "u 0:1 "; 
 		}else if(nVariabili=1 && nColonne==2){
@@ -367,8 +444,15 @@ int GnuplotDriver::comandofit(string funzione, string parametri){
 		buf << "e" << endl;
 
 		if(nVariabili==1){
+			buf << "unset xrange" << endl << "unset yrange" << endl;
+			if(limitx!=""){
+				buf << "set xrange " << limitx << endl;
+			}
+			if(limity!=""){
+				buf << "set yrange " << limity << endl;
+			}
 			buf << "set key " << posLegenda << endl;
-			buf << "plot " << limits << " \"-\" ";
+			buf << "plot " << " \"-\" ";
 			if(nColonne==1){
 				buf << "u 0:1 ";
 			}else if(nColonne==2){
