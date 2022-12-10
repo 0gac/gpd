@@ -26,6 +26,7 @@ GnuplotDriver::GnuplotDriver() {
 	daEseguire=false;
 	legenda=false;
 	auto_color=true;
+	printData=false;
 	trace_color = "blue";
 	format="pdf";
 	background_color = "white";
@@ -67,6 +68,19 @@ GnuplotDriver::~GnuplotDriver() {
 			}
 			fprintf(gp, "%s",string_final.str().c_str());
 			// printf("%s",string_final.str().c_str());
+			if(printData){
+				string nomeFile = printDataName+".dat";
+				outFile=fopen(nomeFile.c_str(), "w");
+				string datiOut = data.str();
+				string sostituto = "\n";
+				size_t daSostituire = datiOut.find("e");
+				while(daSostituire != std::string::npos){
+					datiOut.replace(daSostituire, sostituto.length(), sostituto);
+					daSostituire=datiOut.find("e");
+				}
+				fprintf(outFile, "%s", datiOut.c_str());
+				fclose(outFile);
+			}
 		}else{
 			cerr << "non è possibile creare una stream valida con le opzioni specificate"<< endl;
 		}
@@ -141,6 +155,10 @@ int GnuplotDriver::conf(string opzione, string argomento){
 	if(opzione=="keyLoc"){
 		posLegenda=argomento;
 	}
+	if(opzione=="print"){
+		printData=true;
+		printDataName=argomento;
+	}
 	return -1;
 }
 
@@ -166,7 +184,8 @@ int GnuplotDriver::conf(string opzione){
 		cerr << "       [func (prossimo argomento è una funzione con la sintassi di gnuplot che verrà plottata nel grafico insieme ai dati. Non funziona con -m)" << endl;		
 		cerr << "       [noGrid (rimuove la griglia dal grafico)]" << endl;		
 		cerr << "		[lt (line title, specifica il titolo della linea successiva nella legenda.)]" << endl;
-		cerr <<"		[keyLoc (key location: top right, top left, bottom right, bottom left.)]";
+		cerr << "		[keyLoc (key location: top right, top left, bottom right, bottom left.)]";
+		cerr << "		[print (crea un file .dat con il nome dato in argomento dove salva i dati usati per fare il grafico)]" << endl;
 		return 0;
 	}
 	if(opzione=="p"){
