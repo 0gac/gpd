@@ -26,7 +26,7 @@ GnuplotDriver::GnuplotDriver() {
 	daEseguire=false;
 	legenda=false;
 	auto_color=true;
-	printData=false;
+	printData=0; // 0 default (print solo se salvo il grafico in pdf) , 1 sempre print, -1 mai print
 	trace_color = "blue";
 	format="pdf";
 	background_color = "white";
@@ -68,15 +68,20 @@ GnuplotDriver::~GnuplotDriver() {
 			}
 			fprintf(gp, "%s",string_final.str().c_str());
 			// printf("%s",string_final.str().c_str());
-			if(printData){
-				string nomeFile = printDataName+".dat";
-				outFile=fopen(nomeFile.c_str(), "w");
+			if((printData == 1) || ((printData == 0) && suFile == true)){
+				string nomeOutput;
+				if(printData == 1){
+					nomeOutput = printDataName+".dat";
+				}else{
+					nomeOutput = nomefile+".dat";
+				}
+				outFile=fopen(nomeOutput.c_str(), "w");
 				string datiOut = data.str();
-				string sostituto = "\n";
-				size_t daSostituire = datiOut.find("e");
+				string sostituto = "\n\n";
+				size_t daSostituire = datiOut.find("e\n");
 				while(daSostituire != std::string::npos){
 					datiOut.replace(daSostituire, sostituto.length(), sostituto);
-					daSostituire=datiOut.find("e");
+					daSostituire=datiOut.find("e\n");
 				}
 				fprintf(outFile, "%s", datiOut.c_str());
 				fclose(outFile);
@@ -156,7 +161,7 @@ int GnuplotDriver::conf(string opzione, string argomento){
 		posLegenda=argomento;
 	}
 	if(opzione=="print"){
-		printData=true;
+		printData=1;
 		printDataName=argomento;
 	}
 	return -1;
@@ -206,6 +211,10 @@ int GnuplotDriver::conf(string opzione){
 	}
 	if(opzione=="noGrid"){
 		griglia=false;
+		return 0;
+	}
+	if(opzione=="noPrint"){
+		printData=-1;
 		return 0;
 	}
 	return -1;

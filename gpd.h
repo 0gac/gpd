@@ -10,9 +10,9 @@
 class GnuplotDriver{
     std::string xlabel,ylabel,zlabel, title, trace_color,background_color, nomefile, format, limitx, limity, limitz, limitx_fit, limity_fit, funzione, stileRiga, titoloRiga, posLegenda, printDataName;
     std::string * codici_colore;
-    bool inverse,raise,persist,logX,logY,matrice, suFile, funzioneOverlay,fitting, griglia, daEseguire, legenda, auto_color, printData;
+    bool inverse,raise,persist,logX,logY,matrice, suFile, funzioneOverlay,fitting, griglia, daEseguire, legenda, auto_color;
     std::stringstream config_stream_string, buf, data;
-    int nColonne, nRighe, num_linea, max_linee;
+    int nColonne, nRighe, num_linea, max_linee, printData;
     FILE *gp, *outFile;
     public:
     GnuplotDriver();
